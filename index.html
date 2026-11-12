@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מנהל מטלות | הנדסת חשמל</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rubik:wght@300;400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --panel: #0e1626;
+    --panel-2: #131e33;
+    --line: #1f2d48;
+    --text: #e6edf7;
+    --muted: #8193b2;
+    --accent: #00e5ff;
+    --danger: #ff4d6d;
+    --warn: #ffb020;
+    --font-ui: 'Rubik', 'Segoe UI', Arial, sans-serif;
+    --font-tech: 'Orbitron', 'JetBrains Mono', Consolas, monospace;
+    --font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-ui);
+    color: var(--text);
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 15% 0%, rgba(0,229,255,.10), transparent 45%),
+      radial-gradient(ellipse at 90% 100%, rgba(167,139,250,.10), transparent 45%),
+      linear-gradient(rgba(0,229,255,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.045) 1px, transparent 1px);
+    background-size: auto, auto, 36px 36px, 36px 36px;
+    background-attachment: fixed;
+  }
+  /* circuit traces overlay */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: .5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240' fill='none' stroke='%2300e5ff' stroke-opacity='.10' stroke-width='1.2'%3E%3Cpath d='M0 60h50l20 20h60l20-20h90'/%3E%3Cpath d='M60 240v-50l20-20v-50'/%3E%3Cpath d='M180 0v40l20 20v60l-20 20v60'/%3E%3Ccircle cx='50' cy='60' r='3'/%3E%3Ccircle cx='130' cy='80' r='3'/%3E%3Ccircle cx='80' cy='120' r='3'/%3E%3Ccircle cx='200' cy='60' r='3'/%3E%3Ccircle cx='180' cy='200' r='3'/%3E%3C/svg%3E");
+    background-size: 240px 240px;
+  }
+  .wrap { position: relative; max-width: 960px; margin: 0 auto; padding: 32px 18px 80px; }
+
+  header { text-align: center; margin-bottom: 28px; }
+  .logo {
+    display: inline-flex; align-items: center; gap: 14px;
+  }
+  .logo svg { width: 46px; height: 46px; filter: drop-shadow(0 0 8px var(--accent)); }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 4vw, 2.3rem);
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-shadow: 0 0 18px rgba(0,229,255,.45);
+  }
+  .sub { margin: 8px 0 0; color: var(--muted); font-family: var(--font-tech); font-size: .75rem; letter-spacing: 3px; direction: ltr; }
+
+  .toolbar { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .tool-btn {
+    font: inherit; font-size: .88rem; cursor: pointer;
+    color: var(--accent); background: rgba(0,229,255,.06);
+    border: 1px solid rgba(0,229,255,.5); border-radius: 10px; padding: 8px 16px;
+    transition: background .2s, box-shadow .2s, transform .15s;
+  }
+  .tool-btn:hover { background: rgba(0,229,255,.14); box-shadow: 0 0 16px rgba(0,229,255,.35); transform: translateY(-2px); }
+  .tool-btn:active { transform: scale(.96); }
+  .toast { min-height: 1.4em; margin: 10px 0 0; font-size: .85rem; color: var(--ok-msg, #39ff88); transition: opacity .4s; }
+  .toast.err { --ok-msg: var(--danger); }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
+    position: relative;
+  }
+  .panel::before, .panel::after {
+    content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--accent); opacity: .7;
+  }
+  .panel::before { top: -1px; right: -1px; border-left: 0; border-bottom: 0; border-top-right-radius: 16px; }
+  .panel::after { bottom: -1px; left: -1px; border-right: 0; border-top: 0; border-bottom-left-radius: 16px; }
+
+  .panel h2 { margin: 0 0 14px; font-size: 1.05rem; font-weight: 500; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .panel h2::before { content: ""; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); }
+
+  form { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  label { font-size: .8rem; color: var(--muted); }
+  input[type="text"], input[type="datetime-local"], select {
+    width: 100%;
+    font: inherit; color: var(--text);
+    background: #0a111f;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 11px 12px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    color-scheme: dark;
+  }
+  select option { background: #0a111f; color: var(--text); }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,255,.18), 0 0 14px rgba(0,229,255,.2); }
+  input::placeholder { color: #51617f; }
+  .course-select.has-course { border-color: var(--sel, var(--line)); box-shadow: inset 0 0 0 1px var(--sel, transparent); }
+
+  button.add {
+    font: inherit; font-weight: 700; cursor: pointer;
+    color: #031018;
+    background: linear-gradient(135deg, var(--accent), #00ff9d);
+    border: 0; border-radius: 10px;
+    padding: 12px 22px;
+    transition: transform .15s, box-shadow .2s, filter .2s;
+    box-shadow: 0 0 16px rgba(0,229,255,.35);
+  }
+  button.add:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,229,255,.55); filter: brightness(1.08); }
+  button.add:active { transform: translateY(0) scale(.96); }
+  .error { grid-column: 1 / -1; color: var(--danger); font-size: .85rem; min-height: 1em; margin: 0; }
+
+  .course-form {
+    display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end;
+    margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--line);
+  }
+  button.add.secondary {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); box-shadow: none;
+  }
+  button.add.secondary:hover { background: rgba(0,229,255,.12); box-shadow: 0 0 18px rgba(0,229,255,.35); }
+  .select-row { display: flex; gap: 8px; align-items: center; }
+  .select-row select { flex: 1; min-width: 0; }
+  .hint { margin: 10px 2px 0; font-size: .8rem; color: var(--muted); min-height: 1em; }
+
+  /* hold-to-delete button: a ring fills (--p: 0..1) while the button is held */
+  .chip-del {
+    --p: 0;
+    position: relative; flex: none; cursor: pointer;
+    width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+    background: conic-gradient(var(--danger) calc(var(--p) * 360deg), rgba(255,77,109,.4) 0);
+    box-shadow: 0 0 calc(var(--p) * 18px) calc(var(--p) * 5px) var(--danger);
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    transition: opacity .25s ease;
+  }
+  .chip-del::before {
+    content: ""; position: absolute; inset: 2px; border-radius: inherit;
+    background: color-mix(in srgb, var(--panel) 88%, var(--danger));
+  }
+  .chip-del::after {
+    content: "\00d7"; position: relative; display: block;
+    font-size: 1rem; line-height: 22px; text-align: center; color: var(--danger);
+  }
+  .chip-del.holding::before { background: color-mix(in srgb, var(--panel) calc((1 - var(--p)) * 88%), var(--danger)); }
+  .chip-del.holding::after { color: #fff; }
+  .chip-del:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .chip-del:disabled { opacity: .3; cursor: not-allowed; }
+
+  .chip-del.select-del { width: 40px; height: 40px; border-radius: 10px; }
+  .chip-del.select-del::after { font-size: 1.3rem; line-height: 40px; }
+
+  /* chip delete button: hidden until the chip is hovered/focused, replaces the colour dot */
+  .chip .chip-del {
+    position: absolute; inset-inline-start: 4px; top: calc(50% - 11px);
+    opacity: 0; pointer-events: none;
+  }
+  .chip:hover .chip-del, .chip:focus-within .chip-del, .chip .chip-del.holding { opacity: 1; pointer-events: auto; }
+  .chip i { transition: opacity .25s ease; }
+  .chip:hover i, .chip:focus-within i, .chip:has(.holding) i { opacity: 0; }
+  @media (hover: none) {
+    .chip .chip-del { opacity: 1; pointer-events: auto; }
+    .chip i { opacity: 0; }
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 6px; }
+  .chip {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: .78rem; color: var(--text);
+    padding: 5px 11px; border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+    background: color-mix(in srgb, var(--c) 10%, transparent);
+  }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); }
+
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin: 26px 2px 12px; }
+  .list-head h2 { margin: 0; font-size: 1.15rem; font-weight: 500; }
+  .count { font-family: var(--font-mono); color: var(--accent); font-size: .85rem; }
+
+  #tasks { display: grid; gap: 14px; padding: 0; margin: 0; list-style: none; }
+
+  .task {
+    --c: var(--accent);
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 18px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c) 9%, var(--panel-2)), var(--panel));
+    border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line));
+    border-inline-start: 4px solid var(--c);
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.4), 0 0 0 rgba(0,0,0,0);
+    transition: transform .25s ease, box-shadow .25s ease, opacity .5s ease, border-color .25s;
+    overflow: hidden;
+  }
+  .task:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(0,0,0,.5), 0 0 22px color-mix(in srgb, var(--c) 35%, transparent);
+    border-color: var(--c);
+  }
+  .task.enter { animation: enter .45s cubic-bezier(.2,.8,.2,1); }
+  @keyframes enter { from { opacity: 0; transform: translateY(-14px) scale(.96); } to { opacity: 1; transform: none; } }
+
+  .task.done { opacity: .5; filter: grayscale(.55); }
+  .task.done .name { text-decoration: line-through; text-decoration-thickness: 2px; color: var(--muted); }
+  .task.done::after {
+    content: ""; position: absolute; bottom: 0; right: 0; height: 3px; width: 100%;
+    background: var(--c); transform-origin: right; animation: drain 3s linear forwards;
+  }
+  @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  .task.removing { animation: out .5s ease forwards; pointer-events: none; }
+  @keyframes out {
+    0% { opacity: .5; transform: none; max-height: 120px; }
+    60% { opacity: 0; transform: translateX(-60px) scale(.92); max-height: 120px; }
+    100% { opacity: 0; transform: translateX(-60px) scale(.92); max-height: 0; padding-block: 0; margin-block: -7px; border-width: 0; }
+  }
+
+  /* custom checkbox */
+  .check { position: relative; width: 28px; height: 28px; cursor: pointer; display: block; }
+  .check input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .check span {
+    position: absolute; inset: 0; border-radius: 8px;
+    border: 2px solid var(--c); background: rgba(0,0,0,.25);
+    transition: background .2s, box-shadow .2s, transform .15s;
+  }
+  .check span::after {
+    content: ""; position: absolute; left: 8px; top: 3px; width: 7px; height: 13px;
+    border: solid #031018; border-width: 0 3px 3px 0; transform: rotate(45deg) scale(0); transition: transform .2s;
+  }
+  .check:hover span { box-shadow: 0 0 12px var(--c); transform: scale(1.08); }
+  .check input:checked + span { background: var(--c); box-shadow: 0 0 14px var(--c); }
+  .check input:checked + span::after { transform: rotate(45deg) scale(1); }
+  .check input:focus-visible + span { outline: 2px solid #fff; outline-offset: 2px; }
+
+  .info { min-width: 0; }
+  .name { font-size: 1.1rem; font-weight: 500; margin: 0 0 8px; overflow-wrap: anywhere; transition: color .3s; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .82rem; color: var(--muted); }
+  .course { color: var(--c); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 50%, transparent); }
+  .course::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+  .due { font-family: var(--font-mono); font-size: .78rem; direction: ltr; unicode-bidi: isolate; }
+
+  .countdown { text-align: center; min-width: 150px; }
+  .cd-main { font-weight: 700; font-size: 1.05rem; color: var(--ok, #39ff88); }
+  .cd-clock { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); direction: ltr; margin-top: 3px; }
+  .task.soon { --ok: var(--warn); }
+  .task.overdue { --ok: var(--danger); }
+  .task.overdue .cd-main { animation: blink 1.2s ease-in-out infinite; text-shadow: 0 0 10px var(--danger); }
+  .task.done .cd-main { animation: none; }
+  @keyframes blink { 50% { opacity: .45; } }
+
+  .empty {
+    text-align: center; padding: 44px 16px; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: 14px;
+  }
+  .empty b { display: block; font-family: var(--font-tech); color: var(--accent); letter-spacing: 2px; margin-bottom: 6px; direction: ltr; }
+
+  @media (max-width: 760px) {
+    form, .course-form { grid-template-columns: 1fr; }
+    .task { grid-template-columns: auto 1fr; }
+    .countdown { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; text-align: start; border-top: 1px dashed var(--line); padding-top: 10px; min-width: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M27 4 12 27h11l-2 17 15-23H25z"/>
+      </svg>
+      <h1>מנהל מטלות הנדסת חשמל</h1>
+    </div>
+    <p class="sub">ELECTRICAL ENGINEERING // TASK CONTROL</p>
+    <div class="toolbar">
+      <button type="button" class="tool-btn" id="exportBtn">⬇ ייצוא נתונים</button>
+      <button type="button" class="tool-btn" id="importBtn">⬆ ייבוא נתונים</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <p class="toast" id="toast" role="status" aria-live="polite"></p>
+  </header>
+
+  <section class="panel">
+    <h2>הוספת מטלה</h2>
+    <form id="form" novalidate>
+      <div class="field">
+        <label for="name">שם המטלה</label>
+        <input type="text" id="name" maxlength="120" placeholder="לדוגמה: תרגיל בית 3" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="course">קורס</label>
+        <div class="select-row">
+          <select id="course" class="course-select">
+            <option value="">בחר קורס…</option>
+          </select>
+          <button type="button" class="chip-del select-del" id="courseDel" title="החזק לחוץ כדי למחוק את הקורס הנבחר" aria-label="מחק את הקורס הנבחר (החזק לחוץ)" disabled></button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="due">מועד הגשה מדויק</label>
+        <input type="datetime-local" id="due">
+      </div>
+      <button type="submit" class="add">+ הוסף</button>
+      <p class="error" id="error" role="alert"></p>
+    </form>
+    <div class="legend" id="legend"></div>
+    <p class="hint" id="courseHint"></p>
+    <form id="courseForm" class="course-form" novalidate>
+      <div class="field">
+        <label for="newCourse">קורס חדש</label>
+        <input type="text" id="newCourse" maxlength="40" placeholder="לדוגמה: אלגוריתמים" autocomplete="off">
+      </div>
+      <button type="submit" class="add secondary">+ הוסף קורס</button>
+      <p class="error" id="courseError" role="alert"></p>
+    </form>
+  </section>
+
+  <div class="list-head">
+    <h2>מטלות פעילות</h2>
+    <span class="count" id="count"></span>
+  </div>
+  <ul id="tasks"></ul>
+  <div class="empty" id="empty" hidden><b>NO ACTIVE TASKS</b>אין מטלות פעילות. זמן לנשום (או להוסיף מטלה חדשה).</div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const PREDEFINED = [
+    { name: 'מעגלים אלקטרוניים',     color: '#00d4ff' }, // neon blue
+    { name: 'מל"ג',                  color: '#39ff88' }, // circuit green
+    { name: 'אותות אקראיים',         color: '#ff4fd8' }, // magenta
+    { name: 'מעבדה בחשמל 1ב',        color: '#ff9f1c' }, // warning orange
+    { name: 'גלים ומערכות מפולגות',  color: '#a78bfa' }, // violet
+    { name: 'אלקטרוניקה פיזיקלית',   color: '#ffe14d' }  // amber yellow
+  ];
+  const PALETTE = [
+    '#5eead4', '#f0abfc', '#fda4af', '#fdba74', '#86efac', '#93c5fd',
+    '#c4b5fd', '#f9a8d4', '#fcd34d', '#67e8f9', '#bef264', '#7dd3fc',
+    '#fb7185', '#a3e635', '#38bdf8', '#e879f9'
+  ];
+  const STORAGE_KEY = 'ee-tasks-manager-v1';
+  const COURSES_KEY = 'ee-tasks-manager-courses-v2';
+  const LEGACY_COURSES_KEY = 'ee-tasks-manager-courses-v1';
+
+  function validCourses(data, seed = []) {
+    const seen = new Set(seed.map(c => c.name));
+    const out = [...seed];
+    (Array.isArray(data) ? data : []).forEach(c => {
+      if (c && typeof c.name === 'string' && c.name.trim() && /^#[0-9a-f]{6}$/i.test(c.color) && !seen.has(c.name)) {
+        seen.add(c.name);
+        out.push({ name: c.name, color: c.color });
+      }
+    });
+    return out;
+  }
+  // The full course list is stored, so deleted courses (even predefined ones) stay deleted.
+  function loadCourses() {
+    try {
+      const raw = localStorage.getItem(COURSES_KEY);
+      if (raw !== null) return validCourses(JSON.parse(raw));
+      // First run, or upgrade from the version that stored only custom courses
+      const legacy = JSON.parse(localStorage.getItem(LEGACY_COURSES_KEY));
+      return validCourses(legacy, PREDEFINED.map(c => ({ ...c })));
+    } catch { return PREDEFINED.map(c => ({ ...c })); }
+  }
+  function saveCourses() {
+    try { localStorage.setItem(COURSES_KEY, JSON.stringify(COURSES)); } catch {}
+  }
+
+  const COURSES = loadCourses();
+  const COURSE_COLOR = new Map(COURSES.map(c => [c.name, c.color]));
+  const DELETE_DELAY = 3000;
+  const REMOVE_ANIM = 500;
+
+  const $ = id => document.getElementById(id);
+  const form = $('form'), nameEl = $('name'), courseEl = $('course'), dueEl = $('due'), courseDelEl = $('courseDel');
+  const errorEl = $('error'), listEl = $('tasks'), emptyEl = $('empty'), countEl = $('count');
+
+  let tasks = load();
+  const timers = new Map();   // task id -> timeout id
+  const newIds = new Set();   // ids to animate on first render
+
+  /* ---------- storage ---------- */
+  function load() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!Array.isArray(data)) return [];
+      return data.filter(t => t && typeof t.id === 'string' && typeof t.name === 'string'
+        && COURSE_COLOR.has(t.course) && Number.isFinite(t.due));
+    } catch { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
+  }
+
+  /* ---------- setup form ---------- */
+  function renderCourses() {
+    const prev = courseEl.value;
+    courseEl.replaceChildren(new Option('בחר קורס…', ''));
+    $('legend').replaceChildren();
+    COURSES.forEach(c => {
+      const o = new Option(c.name, c.name);
+      o.style.color = c.color;
+      courseEl.appendChild(o);
+
+      const chip = document.createElement('span');
+      chip.className = 'chip'; chip.style.setProperty('--c', c.color);
+      chip.innerHTML = '<i></i>';
+      chip.append(c.name);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'chip-del';
+      del.title = 'החזק לחוץ כדי למחוק';
+      del.setAttribute('aria-label', 'מחק קורס (החזק לחוץ): ' + c.name);
+      attachHold(del, () => c.name);
+      chip.append(del);
+      $('legend').appendChild(chip);
+    });
+    courseEl.value = COURSE_COLOR.has(prev) ? prev : '';
+    syncCourseColor();
+    renderHint();
+  }
+
+  const HOLD_MS = 2500;
+  function renderHint(override) {
+    $('courseHint').textContent = override || (COURSES.length
+      ? `כדי למחוק קורס: רחף מעליו והחזק את כפתור ה-× לחוץ ${HOLD_MS / 1000} שניות (או השתמש בכפתור שליד התפריט הנפתח).`
+      : 'אין קורסים. הוסף קורס חדש כדי שתוכל ליצור מטלות.');
+  }
+
+  // Press-and-hold: the button's --p (0..1) drives the ring/glow; releasing early cancels.
+  function attachHold(btn, getName) {
+    let raf = 0, start = 0, active = false;
+    const reset = () => {
+      cancelAnimationFrame(raf);
+      active = false;
+      btn.classList.remove('holding');
+      btn.style.setProperty('--p', 0);
+      renderHint();
+    };
+    const step = now => {
+      const p = Math.min(1, (now - start) / HOLD_MS);
+      btn.style.setProperty('--p', p);
+      if (p < 1) { raf = requestAnimationFrame(step); return; }
+      const name = getName();
+      reset();
+      removeCourse(name);
+    };
+    const begin = () => {
+      if (active || btn.disabled) return;
+      const name = getName();
+      const n = tasks.filter(t => t.course === name).length;
+      active = true;
+      start = performance.now();
+      btn.classList.add('holding');
+      renderHint(`ממשיך להחזיק למחיקת "${name}"…` + (n ? ` יימחקו גם ${n === 1 ? 'מטלה אחת' : n + ' מטלות'}.` : ''));
+      raf = requestAnimationFrame(step);
+    };
+    btn.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      begin();
+    });
+    ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(ev =>
+      btn.addEventListener(ev, () => active && reset()));
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+    btn.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); begin(); }
+    });
+    btn.addEventListener('keyup', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && active) reset();
+    });
+  }
+
+  function removeCourse(name) {
+    const related = tasks.filter(t => t.course === name);
+    const i = COURSES.findIndex(c => c.name === name);
+    if (i < 0) return;
+    COURSES.splice(i, 1);
+    COURSE_COLOR.delete(name);
+    saveCourses();
+    if (related.length) {
+      related.forEach(t => { clearTimeout(timers.get(t.id)); timers.delete(t.id); });
+      tasks = tasks.filter(t => t.course !== name);
+      save();
+      render();
+    }
+    renderCourses();
+  }
+  function syncCourseColor() {
+    const color = COURSE_COLOR.get(courseEl.value);
+    courseEl.classList.toggle('has-course', !!color);
+    if (color) courseEl.style.setProperty('--sel', color);
+    courseDelEl.disabled = !color;
+  }
+  courseEl.addEventListener('change', syncCourseColor);
+  attachHold(courseDelEl, () => courseEl.value);
+
+  function pickColor(extra = COURSES) {
+    const used = new Set(extra.map(c => c.color.toLowerCase()));
+    const free = PALETTE.filter(c => !used.has(c));
+    const pool = free.length ? free : PALETTE;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  const courseForm = $('courseForm'), newCourseEl = $('newCourse'), courseErrorEl = $('courseError');
+  courseForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const name = newCourseEl.value.trim().replace(/\s+/g, ' ');
+    if (!name) { courseErrorEl.textContent = 'נא להזין שם קורס'; newCourseEl.focus(); return; }
+    if (COURSES.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+      courseErrorEl.textContent = 'קורס בשם הזה כבר קיים';
+      newCourseEl.focus();
+      return;
+    }
+    const color = pickColor();
+    COURSES.push({ name, color });
+    COURSE_COLOR.set(name, color);
+    saveCourses();
+    courseErrorEl.textContent = '';
+    newCourseEl.value = '';
+    renderCourses();
+    courseEl.value = name;
+    syncCourseColor();
+    errorEl.textContent = '';
+  });
+  newCourseEl.addEventListener('input', () => courseErrorEl.textContent = '');
+  renderCourses();
+
+  const pad = n => String(n).padStart(2, '0');
+  function toInputValue(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function defaultDue() {
+    const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(23, 59, 0, 0);
+    return toInputValue(d);
+  }
+  dueEl.value = defaultDue();
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const name = nameEl.value.trim();
+    const course = courseEl.value;
+    const due = new Date(dueEl.value).getTime();
+    if (!name) return fail('נא להזין שם מטלה', nameEl);
+    if (!COURSE_COLOR.has(course)) return fail('נא לבחור קורס מהרשימה', courseEl);
+    if (!dueEl.value || !Number.isFinite(due)) return fail('נא להזין תאריך ושעה תקינים', dueEl);
+    errorEl.textContent = '';
+
+    const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
+    tasks.push({ id, name, course, due, completedAt: null });
+    newIds.add(id);
+    save();
+    render();
+    nameEl.value = '';
+    dueEl.value = defaultDue();
+    nameEl.focus();
+  });
+  function fail(msg, el) { errorEl.textContent = msg; el.focus(); }
+  [nameEl, courseEl, dueEl].forEach(el => el.addEventListener('input', () => errorEl.textContent = ''));
+
+  /* ---------- countdown formatting ---------- */
+  function plural(n, one, two, many) {
+    return n === 1 ? one : n === 2 ? two : `${n} ${many}`;
+  }
+  function countdownText(diff) {
+    if (diff < 0) return 'באיחור!';
+    const sec = Math.floor(diff / 1000);
+    const min = Math.floor(sec / 60);
+    const hrs = Math.floor(min / 60);
+    const days = Math.floor(hrs / 24);
+    if (days >= 1) return 'עוד ' + plural(days, 'יום', 'יומיים', 'ימים');
+    if (hrs >= 1) return 'בעוד ' + plural(hrs, 'שעה', 'שעתיים', 'שעות');
+    if (min >= 1) return 'בעוד ' + plural(min, 'דקה', 'שתי דקות', 'דקות');
+    return 'בעוד ' + plural(sec, 'שנייה', 'שתי שניות', 'שניות');
+  }
+  function clockText(diff) {
+    const abs = Math.abs(diff);
+    const s = Math.floor(abs / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sc = s % 60;
+    return (diff < 0 ? '-' : '') + (d ? d + 'd ' : '') + `${pad(h)}:${pad(m)}:${pad(sc)}`;
+  }
+  const dateFmt = new Intl.DateTimeFormat('he-IL', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+
+  /* ---------- rendering ---------- */
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function buildCard(t) {
+    const li = el('li', 'task');
+    li.dataset.id = t.id;
+    li.style.setProperty('--c', COURSE_COLOR.get(t.course));
+    if (newIds.has(t.id)) { li.classList.add('enter'); newIds.delete(t.id); }
+
+    const label = el('label', 'check');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.setAttribute('aria-label', 'סמן כהושלם: ' + t.name);
+    cb.checked = !!t.completedAt;
+    cb.addEventListener('change', () => toggleDone(t.id, cb.checked));
+    label.append(cb, document.createElement('span'));
+
+    const info = el('div', 'info');
+    info.append(el('p', 'name', t.name));
+    const meta = el('div', 'meta');
+    meta.append(el('span', 'course', t.course), el('span', 'due', dateFmt.format(new Date(t.due))));
+    info.append(meta);
+
+    const cd = el('div', 'countdown');
+    cd.append(el('div', 'cd-main'), el('div', 'cd-clock'));
+
+    li.append(label, info, cd);
+    if (t.completedAt) li.classList.add('done');
+    return li;
+  }
+
+  function sorted() {
+    return [...tasks].sort((a, b) => a.due - b.due || a.id.localeCompare(b.id));
+  }
+
+  function render() {
+    listEl.replaceChildren(...sorted().map(buildCard));
+    emptyEl.hidden = tasks.length > 0;
+    countEl.textContent = tasks.length ? `${tasks.length} ACTIVE` : '';
+    tick();
+  }
+
+  function tick() {
+    const now = Date.now();
+    for (const li of listEl.children) {
+      const t = tasks.find(x => x.id === li.dataset.id);
+      if (!t) continue;
+      const diff = t.due - now;
+      li.classList.toggle('overdue', diff < 0);
+      li.classList.toggle('soon', diff >= 0 && diff < 86400000);
+      li.querySelector('.cd-main').textContent = countdownText(diff);
+      li.querySelector('.cd-clock').textContent = clockText(diff);
+    }
+  }
+
+  /* ---------- completion & auto delete ---------- */
+  function toggleDone(id, checked) {
+    const t = tasks.find(x => x.id === id);
+    const li = listEl.querySelector(`[data-id="${CSS.escape(id)}"]`);
+    if (!t || !li) return;
+    clearTimeout(timers.get(id)); timers.delete(id);
+    if (checked) {
+      t.completedAt = Date.now();
+      li.classList.remove('removing');
+      // restart the drain animation
+      li.classList.remove('done'); void li.offsetWidth; li.classList.add('done');
+      scheduleRemoval(id, DELETE_DELAY);
+    } else {
+      t.completedAt = null;
+      li.classList.remove('done');
+    }
+    save();
+  }
+
+  function scheduleRemoval(id, delay) {
+    clearTimeout(timers.get(id));
+    timers.set(id, setTimeout(() => {
+      timers.delete(id);
+      const li = listEl.querySelector(`[data-id="${CSS.escape(id)}"]`);
+      const finish = () => {
+        tasks = tasks.filter(x => x.id !== id);
+        save();
+        li && li.remove();
+        emptyEl.hidden = tasks.length > 0;
+        countEl.textContent = tasks.length ? `${tasks.length} ACTIVE` : '';
+      };
+      if (!li) return finish();
+      li.classList.add('removing');
+      setTimeout(finish, REMOVE_ANIM);
+    }, delay));
+  }
+
+  /* ---------- export / import ---------- */
+  const toastEl = $('toast'), importFile = $('importFile');
+  let toastTimer = 0;
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.textContent = ''; }, 6000);
+  }
+
+  $('exportBtn').addEventListener('click', () => {
+    const data = {
+      app: 'ee-tasks-manager',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      courses: COURSES.map(({ name, color }) => ({ name, color })),
+      tasks: tasks.map(({ id, name, course, due }) => ({ id, name, course, due }))
+    };
+    const d = new Date();
+    const file = `ee-tasks-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`הנתונים יוצאו לקובץ ${file}`);
+  });
+
+  $('importBtn').addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', async () => {
+    const file = importFile.files[0];
+    importFile.value = '';
+    if (!file) return;
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { return toast('הקובץ אינו קובץ JSON תקין', true); }
+    if (!data || data.app !== 'ee-tasks-manager' || !Array.isArray(data.courses) || !Array.isArray(data.tasks)) {
+      return toast('הקובץ אינו קובץ גיבוי של האפליקציה', true);
+    }
+    const courses = validCourses(data.courses);
+    const known = new Set(courses.map(c => c.name));
+    const ids = new Set();
+    let skipped = 0;
+    const imported = [];
+    data.tasks.forEach(t => {
+      if (!t || typeof t.name !== 'string' || !t.name.trim() || typeof t.course !== 'string'
+        || !t.course.trim() || !Number.isFinite(t.due)) { skipped++; return; }
+      if (!known.has(t.course)) {
+        // task refers to a course missing from the file: recreate it so the task isn't lost
+        courses.push({ name: t.course, color: pickColor(courses) });
+        known.add(t.course);
+      }
+      let id = typeof t.id === 'string' && t.id ? t.id : '';
+      if (!id || ids.has(id)) id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
+      ids.add(id);
+      imported.push({ id, name: t.name.trim().slice(0, 120), course: t.course, due: t.due, completedAt: null });
+    });
+    if ((tasks.length || COURSES.length) &&
+        !confirm(`הייבוא יחליף את הנתונים הנוכחיים (קורסים: ${COURSES.length}, מטלות: ${tasks.length}) ` +
+                 `בנתונים מהקובץ (קורסים: ${courses.length}, מטלות: ${imported.length}).\nלהמשיך?`)) return;
+
+    timers.forEach(clearTimeout); timers.clear();
+    COURSES.length = 0; COURSES.push(...courses);
+    COURSE_COLOR.clear(); COURSES.forEach(c => COURSE_COLOR.set(c.name, c.color));
+    tasks = imported;
+    saveCourses(); save();
+    renderCourses(); render();
+    toast(`הייבוא הושלם. קורסים: ${courses.length}, מטלות: ${imported.length}` + (skipped ? ` (מטלות לא תקינות שדולגו: ${skipped})` : ''));
+  });
+
+  /* ---------- init ---------- */
+  // Resume pending deletions that were in progress when the page was closed
+  const now0 = Date.now();
+  tasks = tasks.filter(t => {
+    if (!t.completedAt) { t.completedAt = null; return true; }
+    return now0 - t.completedAt < DELETE_DELAY;
+  });
+  save();
+  render();
+  tasks.forEach(t => {
+    if (t.completedAt) scheduleRemoval(t.id, Math.max(0, DELETE_DELAY - (now0 - t.completedAt)));
+  });
+  setInterval(tick, 1000);
+})();
+</script>
+</body>
+</html>
