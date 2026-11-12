@@ -92,7 +92,9 @@
   .panel h2 { margin: 0 0 14px; font-size: 1.05rem; font-weight: 500; color: var(--accent); display: flex; align-items: center; gap: 8px; }
   .panel h2::before { content: ""; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); }
 
-  form { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  form { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; align-items: end; }
+  #form button.add { justify-self: start; }
+  .field-hint { font-size: .72rem; color: var(--muted); opacity: .8; }
   .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   label { font-size: .8rem; color: var(--muted); }
   input[type="text"], input[type="datetime-local"], select {
@@ -253,6 +255,16 @@
   .course { color: var(--c); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 50%, transparent); }
   .course::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
   .due { font-family: var(--font-mono); font-size: .78rem; direction: ltr; unicode-bidi: isolate; }
+  .planned {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 9px; border-radius: 999px;
+    color: var(--text); font-size: .78rem;
+    border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+  }
+  .planned time { font-family: var(--font-mono); direction: ltr; unicode-bidi: isolate; }
+  .remind { font-size: .78rem; color: var(--muted); }
+  .task.done .planned, .task.done .remind { opacity: .7; }
 
   .countdown { text-align: center; min-width: 150px; }
   .cd-main { font-weight: 700; font-size: 1.05rem; color: var(--ok, #39ff88); }
@@ -316,6 +328,23 @@
       <div class="field">
         <label for="due">מועד הגשה מדויק</label>
         <input type="datetime-local" id="due">
+      </div>
+      <div class="field">
+        <label for="planned">מתי מתכננים לעשות את זה (אופציונלי)</label>
+        <div class="select-row">
+          <input type="datetime-local" id="planned">
+          <button type="button" class="tool-btn" id="plannedClear" title="השאר ריק">נקה</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="remind">התראות מותאמות אישית</label>
+        <select id="remind">
+          <option value="0">ללא תזכורת</option>
+          <option value="60">שעה לפני</option>
+          <option value="1440">יום לפני</option>
+          <option value="2880">יומיים לפני</option>
+        </select>
+        <span class="field-hint">מחושב לפי זמן הביצוע המתוכנן (ואם לא הוגדר – לפי מועד ההגשה)</span>
       </div>
       <button type="submit" class="add">+ הוסף</button>
       <p class="error" id="error" role="alert"></p>
@@ -393,11 +422,16 @@
 
   const $ = id => document.getElementById(id);
   const form = $('form'), nameEl = $('name'), courseEl = $('course'), dueEl = $('due'), courseDelEl = $('courseDel');
+  const plannedEl = $('planned'), remindEl = $('remind');
   const errorEl = $('error'), listEl = $('tasks'), emptyEl = $('empty'), countEl = $('count');
 
   let tasks = load();
   const timers = new Map();   // task id -> timeout id
   const newIds = new Set();   // ids to animate on first render
+
+  const REMIND_LABEL = { 60: 'שעה לפני', 1440: 'יום לפני', 2880: 'יומיים לפני' };
+  const normPlanned = v => Number.isFinite(v) ? v : null;
+  const normRemind = v => Object.hasOwn(REMIND_LABEL, v) ? v : 0;
 
   /* ---------- storage ---------- */
   function load() {
@@ -405,7 +439,8 @@
       const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (!Array.isArray(data)) return [];
       return data.filter(t => t && typeof t.id === 'string' && typeof t.name === 'string'
-        && COURSE_COLOR.has(t.course) && Number.isFinite(t.due));
+        && COURSE_COLOR.has(t.course) && Number.isFinite(t.due))
+        .map(t => ({ ...t, planned: normPlanned(t.planned), remind: normRemind(t.remind), notified: !!t.notified }));
     } catch { return []; }
   }
   function save() {
@@ -564,19 +599,31 @@
     if (!name) return fail('נא להזין שם מטלה', nameEl);
     if (!COURSE_COLOR.has(course)) return fail('נא לבחור קורס מהרשימה', courseEl);
     if (!dueEl.value || !Number.isFinite(due)) return fail('נא להזין תאריך ושעה תקינים', dueEl);
+    let planned = null;
+    if (plannedEl.value) {
+      planned = new Date(plannedEl.value).getTime();
+      if (!Number.isFinite(planned)) return fail('נא להזין זמן ביצוע מתוכנן תקין', plannedEl);
+    }
+    const remind = normRemind(Number(remindEl.value));
     errorEl.textContent = '';
 
     const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
-    tasks.push({ id, name, course, due, completedAt: null });
+    tasks.push({ id, name, course, due, planned, remind, notified: false, completedAt: null });
     newIds.add(id);
     save();
     render();
+    if (remind) ensureNotificationPermission();
+    checkReminders();
     nameEl.value = '';
     dueEl.value = defaultDue();
+    plannedEl.value = '';
+    remindEl.value = '0';
     nameEl.focus();
   });
   function fail(msg, el) { errorEl.textContent = msg; el.focus(); }
-  [nameEl, courseEl, dueEl].forEach(el => el.addEventListener('input', () => errorEl.textContent = ''));
+  [nameEl, courseEl, dueEl, plannedEl, remindEl].forEach(el => el.addEventListener('input', () => errorEl.textContent = ''));
+  remindEl.addEventListener('change', () => { if (Number(remindEl.value)) ensureNotificationPermission(); });
+  $('plannedClear').addEventListener('click', () => { plannedEl.value = ''; plannedEl.focus(); });
 
   /* ---------- countdown formatting ---------- */
   function plural(n, one, two, many) {
@@ -630,6 +677,14 @@
     info.append(el('p', 'name', t.name));
     const meta = el('div', 'meta');
     meta.append(el('span', 'course', t.course), el('span', 'due', dateFmt.format(new Date(t.due))));
+    if (t.planned != null) {
+      const p = el('span', 'planned', '🗓 מתוכנן: ');
+      const time = el('time', null, dateFmt.format(new Date(t.planned)));
+      time.dateTime = new Date(t.planned).toISOString();
+      p.append(time);
+      meta.append(p);
+    }
+    if (t.remind) meta.append(el('span', 'remind', '🔔 ' + REMIND_LABEL[t.remind]));
     info.append(meta);
 
     const cd = el('div', 'countdown');
@@ -701,6 +756,48 @@
     }, delay));
   }
 
+  /* ---------- reminders (browser notifications) ---------- */
+  let permissionPending = false, deniedWarned = false;
+  function ensureNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'default' || permissionPending) return;
+    permissionPending = true;
+    const done = () => { permissionPending = false; checkReminders(); };
+    try {
+      const p = Notification.requestPermission(done);
+      if (p && p.then) p.then(done, done);
+    } catch { permissionPending = false; }
+  }
+
+  function showReminder(t) {
+    const target = t.planned != null ? t.planned : t.due;
+    const when = (t.planned != null ? 'מתוכנן ל: ' : 'מועד הגשה: ') + dateFmt.format(new Date(target));
+    try {
+      new Notification('תזכורת: ' + t.name, { body: `${t.course}\n${when}`, tag: 'ee-task-' + t.id });
+      return true;
+    } catch { return false; }
+  }
+
+  // Notify once per task when (planned time, or deadline if none) minus the chosen lead time is reached.
+  function checkReminders() {
+    const now = Date.now();
+    let changed = false;
+    for (const t of tasks) {
+      if (!t.remind || t.notified || t.completedAt) continue;
+      const target = t.planned != null ? t.planned : t.due;
+      if (now < target - t.remind * 60000) continue;
+      if (now >= target) { t.notified = true; changed = true; continue; } // missed while the page was closed
+      if (!('Notification' in window)) continue;
+      if (Notification.permission === 'default') { ensureNotificationPermission(); continue; }
+      if (Notification.permission !== 'granted') {
+        if (!deniedWarned) { deniedWarned = true; toast('התראות הדפדפן חסומות – לא ניתן להציג תזכורות', true); }
+        continue;
+      }
+      if (showReminder(t)) { t.notified = true; changed = true; }
+    }
+    if (changed) save();
+  }
+
   /* ---------- export / import ---------- */
   const toastEl = $('toast'), importFile = $('importFile');
   let toastTimer = 0;
@@ -717,7 +814,7 @@
       version: 2,
       exportedAt: new Date().toISOString(),
       courses: COURSES.map(({ name, color }) => ({ name, color })),
-      tasks: tasks.map(({ id, name, course, due }) => ({ id, name, course, due }))
+      tasks: tasks.map(({ id, name, course, due, planned, remind }) => ({ id, name, course, due, planned, remind }))
     };
     const d = new Date();
     const file = `ee-tasks-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
@@ -755,7 +852,8 @@
       let id = typeof t.id === 'string' && t.id ? t.id : '';
       if (!id || ids.has(id)) id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
       ids.add(id);
-      imported.push({ id, name: t.name.trim().slice(0, 120), course: t.course, due: t.due, completedAt: null });
+      imported.push({ id, name: t.name.trim().slice(0, 120), course: t.course, due: t.due,
+        planned: normPlanned(t.planned), remind: normRemind(t.remind), notified: false, completedAt: null });
     });
     if ((tasks.length || COURSES.length) &&
         !confirm(`הייבוא יחליף את הנתונים הנוכחיים (קורסים: ${COURSES.length}, מטלות: ${tasks.length}) ` +
@@ -783,6 +881,8 @@
     if (t.completedAt) scheduleRemoval(t.id, Math.max(0, DELETE_DELAY - (now0 - t.completedAt)));
   });
   setInterval(tick, 1000);
+  checkReminders();
+  setInterval(checkReminders, 30000);
 })();
 </script>
 </body>
