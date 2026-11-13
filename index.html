@@ -97,7 +97,8 @@
   .field-hint { font-size: .72rem; color: var(--muted); opacity: .8; }
   .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   label { font-size: .8rem; color: var(--muted); }
-  input[type="text"], input[type="datetime-local"], select {
+  [hidden] { display: none !important; }
+  input[type="text"], input[type="datetime-local"], input[type="email"], input[type="password"], select {
     width: 100%;
     font: inherit; color: var(--text);
     background: #0a111f;
@@ -281,6 +282,20 @@
   }
   .empty b { display: block; font-family: var(--font-tech); color: var(--accent); letter-spacing: 2px; margin-bottom: 6px; direction: ltr; }
 
+  /* auth */
+  .auth-screen { position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 18px; }
+  .auth-panel { width: 100%; max-width: 400px; }
+  .auth-panel .logo { margin-bottom: 18px; }
+  .auth-panel .logo h1 { font-size: 1.3rem; }
+  #authForm { grid-template-columns: 1fr; }
+  .auth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .auth-sep { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: .8rem; }
+  .auth-sep::before, .auth-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+  #googleBtn { width: 100%; }
+  button.add:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+  .userbar { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; }
+  .userbar span { direction: ltr; unicode-bidi: isolate; font-family: var(--font-mono); }
+
   @media (max-width: 760px) {
     form, .course-form { grid-template-columns: 1fr; }
     .task { grid-template-columns: auto 1fr; }
@@ -292,7 +307,36 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="auth-screen" id="authScreen" hidden>
+  <section class="panel auth-panel">
+    <div class="logo">
+      <svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M27 4 12 27h11l-2 17 15-23H25z"/>
+      </svg>
+      <h1>מנהל מטלות הנדסת חשמל</h1>
+    </div>
+    <h2>התחברות / הרשמה</h2>
+    <form id="authForm" novalidate>
+      <div class="field">
+        <label for="authEmail">אימייל</label>
+        <input type="email" id="authEmail" dir="ltr" autocomplete="email" placeholder="name@example.com">
+      </div>
+      <div class="field">
+        <label for="authPass">סיסמה</label>
+        <input type="password" id="authPass" dir="ltr" autocomplete="current-password" placeholder="לפחות 6 תווים">
+      </div>
+      <div class="auth-actions">
+        <button type="submit" class="add" id="loginBtn">התחבר</button>
+        <button type="button" class="add secondary" id="signupBtn">הרשם</button>
+      </div>
+      <p class="error" id="authError" role="alert"></p>
+    </form>
+    <div class="auth-sep">או</div>
+    <button type="button" class="add secondary" id="googleBtn">המשך עם Google</button>
+  </section>
+</div>
+
+<div class="wrap" id="app" hidden>
   <header>
     <div class="logo">
       <svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -305,6 +349,10 @@
       <button type="button" class="tool-btn" id="exportBtn">⬇ ייצוא נתונים</button>
       <button type="button" class="tool-btn" id="importBtn">⬆ ייבוא נתונים</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <div class="userbar">
+        <span id="userEmail"></span>
+        <button type="button" class="tool-btn" id="logoutBtn">התנתק</button>
+      </div>
     </div>
     <p class="toast" id="toast" role="status" aria-live="polite"></p>
   </header>
@@ -369,7 +417,31 @@
   <div class="empty" id="empty" hidden><b>NO ACTIVE TASKS</b>אין מטלות פעילות. זמן לנשום (או להוסיף מטלה חדשה).</div>
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import { getAnalytics, isSupported as analyticsSupported } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js';
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  GoogleAuthProvider, signInWithPopup, signOut
+} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {
+  getFirestore, doc, collection, getDoc, setDoc, deleteDoc, onSnapshot, writeBatch
+} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDtUhyp0DwLTUmEZtN1impdWmJhqT0xcyc",
+  authDomain: "orel-s-project-2ef51.firebaseapp.com",
+  projectId: "orel-s-project-2ef51",
+  storageBucket: "orel-s-project-2ef51.firebasestorage.app",
+  messagingSenderId: "1062614377847",
+  appId: "1:1062614377847:web:1799d320e45b8055296d72",
+  measurementId: "G-49QFEG3BSJ"
+};
+const fbApp = initializeApp(firebaseConfig);
+analyticsSupported().then(ok => { if (ok) getAnalytics(fbApp); }).catch(() => {});
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+
 (() => {
   'use strict';
 
@@ -389,6 +461,7 @@
   const STORAGE_KEY = 'ee-tasks-manager-v1';
   const COURSES_KEY = 'ee-tasks-manager-courses-v2';
   const LEGACY_COURSES_KEY = 'ee-tasks-manager-courses-v1';
+  const MIGRATED_KEY = 'ee-tasks-manager-firebase-migrated';
 
   function validCourses(data, seed = []) {
     const seen = new Set(seed.map(c => c.name));
@@ -401,8 +474,8 @@
     });
     return out;
   }
-  // The full course list is stored, so deleted courses (even predefined ones) stay deleted.
-  function loadCourses() {
+  // Legacy localStorage reader, used only to migrate pre-Firebase data into the first account.
+  function loadLocalCourses() {
     try {
       const raw = localStorage.getItem(COURSES_KEY);
       if (raw !== null) return validCourses(JSON.parse(raw));
@@ -411,12 +484,9 @@
       return validCourses(legacy, PREDEFINED.map(c => ({ ...c })));
     } catch { return PREDEFINED.map(c => ({ ...c })); }
   }
-  function saveCourses() {
-    try { localStorage.setItem(COURSES_KEY, JSON.stringify(COURSES)); } catch {}
-  }
 
-  const COURSES = loadCourses();
-  const COURSE_COLOR = new Map(COURSES.map(c => [c.name, c.color]));
+  const COURSES = [];
+  const COURSE_COLOR = new Map();
   const DELETE_DELAY = 3000;
   const REMOVE_ANIM = 500;
 
@@ -425,26 +495,120 @@
   const plannedEl = $('planned'), remindEl = $('remind');
   const errorEl = $('error'), listEl = $('tasks'), emptyEl = $('empty'), countEl = $('count');
 
-  let tasks = load();
+  let tasks = [];
+  let rawTasks = [];          // last tasks snapshot from Firestore
   const timers = new Map();   // task id -> timeout id
   const newIds = new Set();   // ids to animate on first render
 
   const REMIND_LABEL = { 60: 'שעה לפני', 1440: 'יום לפני', 2880: 'יומיים לפני' };
   const normPlanned = v => Number.isFinite(v) ? v : null;
   const normRemind = v => Object.hasOwn(REMIND_LABEL, v) ? v : 0;
+  const SAFE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+  const newId = () => crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
 
-  /* ---------- storage ---------- */
-  function load() {
-    try {
-      const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (!Array.isArray(data)) return [];
-      return data.filter(t => t && typeof t.id === 'string' && typeof t.name === 'string'
-        && COURSE_COLOR.has(t.course) && Number.isFinite(t.due))
-        .map(t => ({ ...t, planned: normPlanned(t.planned), remind: normRemind(t.remind), notified: !!t.notified }));
-    } catch { return []; }
+  /* ---------- storage (Firestore: users/{uid} + users/{uid}/tasks/{id}) ---------- */
+  let uid = null;
+  const userRef = () => doc(db, 'users', uid);
+  const taskRef = id => doc(db, 'users', uid, 'tasks', id);
+
+  function dbError(e) {
+    console.error(e);
+    toast('שגיאה בסנכרון עם הענן: ' + (e && e.code ? e.code : 'unknown'), true);
   }
-  function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {}
+  const cleanTask = t => ({
+    id: t.id, name: t.name, course: t.course, due: t.due,
+    planned: normPlanned(t.planned), remind: normRemind(t.remind),
+    notified: !!t.notified, completedAt: Number.isFinite(t.completedAt) ? t.completedAt : null
+  });
+  const cleanCourses = () => COURSES.map(({ name, color }) => ({ name, color }));
+
+  function saveCourses() {
+    if (uid) setDoc(userRef(), { courses: cleanCourses() }, { merge: true }).catch(dbError);
+  }
+  function saveTask(t) {
+    if (uid) setDoc(taskRef(t.id), cleanTask(t)).catch(dbError);
+  }
+  function deleteTaskDoc(id) {
+    if (uid) deleteDoc(taskRef(id)).catch(dbError);
+  }
+  // Firestore batches are limited to 500 writes
+  async function commitOps(ops) {
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = writeBatch(db);
+      ops.slice(i, i + 400).forEach(op => op(batch));
+      await batch.commit();
+    }
+  }
+
+  function parseTasks(data) {
+    return data.filter(t => t && typeof t.id === 'string' && typeof t.name === 'string'
+      && COURSE_COLOR.has(t.course) && Number.isFinite(t.due))
+      .map(t => ({ ...t, planned: normPlanned(t.planned), remind: normRemind(t.remind), notified: !!t.notified,
+        completedAt: Number.isFinite(t.completedAt) ? t.completedAt : null }));
+  }
+
+  function applyCourses(list) {
+    COURSES.length = 0; COURSES.push(...validCourses(list));
+    COURSE_COLOR.clear(); COURSES.forEach(c => COURSE_COLOR.set(c.name, c.color));
+    renderCourses();
+    applyTasks();
+  }
+
+  function applyTasks() {
+    tasks = parseTasks(rawTasks);
+    // completed tasks are removed after DELETE_DELAY (also resumes removals started on another device / before a reload)
+    timers.forEach((timer, id) => {
+      const t = tasks.find(x => x.id === id);
+      if (!t || !t.completedAt) { clearTimeout(timer); timers.delete(id); }
+    });
+    tasks.forEach(t => {
+      if (t.completedAt && !timers.has(t.id)) scheduleRemoval(t.id, Math.max(0, DELETE_DELAY - (Date.now() - t.completedAt)));
+    });
+    render();
+    checkReminders();
+  }
+
+  // First sign-in of an account: create its course list, migrating old localStorage data once per browser.
+  async function seedNewUser() {
+    let courses = PREDEFINED.map(c => ({ ...c })), legacyTasks = [];
+    if (!localStorage.getItem(MIGRATED_KEY)) {
+      courses = loadLocalCourses();
+      try {
+        const known = new Set(courses.map(c => c.name));
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        legacyTasks = (Array.isArray(data) ? data : []).filter(t => t && typeof t.id === 'string' && SAFE_ID.test(t.id)
+          && typeof t.name === 'string' && known.has(t.course) && Number.isFinite(t.due)).map(cleanTask);
+      } catch {}
+    }
+    const ops = [b => b.set(userRef(), { courses }, { merge: true }),
+      ...legacyTasks.map(t => b => b.set(taskRef(t.id), t))];
+    await commitOps(ops);
+    try { localStorage.setItem(MIGRATED_KEY, '1'); } catch {}
+  }
+
+  let unsubUser = null, unsubTasks = null;
+  async function startSession(user) {
+    uid = user.uid;
+    try {
+      const snap = await getDoc(userRef());
+      if (uid !== user.uid) return;
+      if (!snap.exists()) await seedNewUser();
+    } catch (e) { dbError(e); }
+    if (uid !== user.uid) return;
+    unsubUser = onSnapshot(userRef(), s => { if (s.exists()) applyCourses(s.data().courses); }, dbError);
+    unsubTasks = onSnapshot(collection(db, 'users', uid, 'tasks'), s => {
+      rawTasks = s.docs.map(d => d.data());
+      applyTasks();
+    }, dbError);
+  }
+  function stopSession() {
+    uid = null;
+    if (unsubUser) unsubUser();
+    if (unsubTasks) unsubTasks();
+    unsubUser = unsubTasks = null;
+    timers.forEach(clearTimeout); timers.clear();
+    rawTasks = [];
+    applyCourses([]);
   }
 
   /* ---------- setup form ---------- */
@@ -536,7 +700,7 @@
     if (related.length) {
       related.forEach(t => { clearTimeout(timers.get(t.id)); timers.delete(t.id); });
       tasks = tasks.filter(t => t.course !== name);
-      save();
+      if (uid) commitOps(related.map(t => b => b.delete(taskRef(t.id)))).catch(dbError);
       render();
     }
     renderCourses();
@@ -607,10 +771,11 @@
     const remind = normRemind(Number(remindEl.value));
     errorEl.textContent = '';
 
-    const id = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2));
-    tasks.push({ id, name, course, due, planned, remind, notified: false, completedAt: null });
+    const id = newId();
+    const task = { id, name, course, due, planned, remind, notified: false, completedAt: null };
+    tasks.push(task);
     newIds.add(id);
-    save();
+    saveTask(task);
     render();
     if (remind) ensureNotificationPermission();
     checkReminders();
@@ -735,7 +900,7 @@
       t.completedAt = null;
       li.classList.remove('done');
     }
-    save();
+    saveTask(t);
   }
 
   function scheduleRemoval(id, delay) {
@@ -745,7 +910,7 @@
       const li = listEl.querySelector(`[data-id="${CSS.escape(id)}"]`);
       const finish = () => {
         tasks = tasks.filter(x => x.id !== id);
-        save();
+        deleteTaskDoc(id);
         li && li.remove();
         emptyEl.hidden = tasks.length > 0;
         countEl.textContent = tasks.length ? `${tasks.length} ACTIVE` : '';
@@ -781,21 +946,21 @@
   // Notify once per task when (planned time, or deadline if none) minus the chosen lead time is reached.
   function checkReminders() {
     const now = Date.now();
-    let changed = false;
+    const changed = [];
     for (const t of tasks) {
       if (!t.remind || t.notified || t.completedAt) continue;
       const target = t.planned != null ? t.planned : t.due;
       if (now < target - t.remind * 60000) continue;
-      if (now >= target) { t.notified = true; changed = true; continue; } // missed while the page was closed
+      if (now >= target) { t.notified = true; changed.push(t); continue; } // missed while the page was closed
       if (!('Notification' in window)) continue;
       if (Notification.permission === 'default') { ensureNotificationPermission(); continue; }
       if (Notification.permission !== 'granted') {
         if (!deniedWarned) { deniedWarned = true; toast('התראות הדפדפן חסומות – לא ניתן להציג תזכורות', true); }
         continue;
       }
-      if (showReminder(t)) { t.notified = true; changed = true; }
+      if (showReminder(t)) { t.notified = true; changed.push(t); }
     }
-    if (changed) save();
+    changed.forEach(saveTask);
   }
 
   /* ---------- export / import ---------- */
@@ -849,8 +1014,8 @@
         courses.push({ name: t.course, color: pickColor(courses) });
         known.add(t.course);
       }
-      let id = typeof t.id === 'string' && t.id ? t.id : '';
-      if (!id || ids.has(id)) id = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
+      let id = typeof t.id === 'string' ? t.id : '';
+      if (!SAFE_ID.test(id) || ids.has(id)) id = newId();
       ids.add(id);
       imported.push({ id, name: t.name.trim().slice(0, 120), course: t.course, due: t.due,
         planned: normPlanned(t.planned), remind: normRemind(t.remind), notified: false, completedAt: null });
@@ -860,28 +1025,76 @@
                  `בנתונים מהקובץ (קורסים: ${courses.length}, מטלות: ${imported.length}).\nלהמשיך?`)) return;
 
     timers.forEach(clearTimeout); timers.clear();
+    const oldIds = rawTasks.map(t => t.id).filter(id => typeof id === 'string' && SAFE_ID.test(id));
     COURSES.length = 0; COURSES.push(...courses);
     COURSE_COLOR.clear(); COURSES.forEach(c => COURSE_COLOR.set(c.name, c.color));
     tasks = imported;
-    saveCourses(); save();
+    saveCourses();
+    const keep = new Set(imported.map(t => t.id));
+    commitOps([
+      ...oldIds.filter(id => !keep.has(id)).map(id => b => b.delete(taskRef(id))),
+      ...imported.map(t => b => b.set(taskRef(t.id), cleanTask(t)))
+    ]).catch(dbError);
     renderCourses(); render();
     toast(`הייבוא הושלם. קורסים: ${courses.length}, מטלות: ${imported.length}` + (skipped ? ` (מטלות לא תקינות שדולגו: ${skipped})` : ''));
   });
 
+  /* ---------- auth ---------- */
+  const authScreen = $('authScreen'), appEl = $('app'), authForm = $('authForm');
+  const authEmail = $('authEmail'), authPass = $('authPass'), authError = $('authError');
+  const authBtns = [$('loginBtn'), $('signupBtn'), $('googleBtn')];
+  const AUTH_MSG = {
+    'auth/invalid-email': 'כתובת אימייל לא תקינה',
+    'auth/missing-email': 'נא להזין אימייל',
+    'auth/missing-password': 'נא להזין סיסמה',
+    'auth/weak-password': 'הסיסמה חלשה מדי (לפחות 6 תווים)',
+    'auth/email-already-in-use': 'כתובת האימייל כבר רשומה – נסה להתחבר',
+    'auth/invalid-credential': 'אימייל או סיסמה שגויים',
+    'auth/user-not-found': 'אימייל או סיסמה שגויים',
+    'auth/wrong-password': 'אימייל או סיסמה שגויים',
+    'auth/too-many-requests': 'יותר מדי ניסיונות, נסה שוב מאוחר יותר',
+    'auth/network-request-failed': 'שגיאת רשת, בדוק את החיבור',
+    'auth/popup-closed-by-user': 'חלון ההתחברות נסגר לפני שהסתיים',
+    'auth/cancelled-popup-request': 'חלון ההתחברות נסגר לפני שהסתיים',
+    'auth/popup-blocked': 'הדפדפן חסם את חלון ההתחברות',
+    'auth/operation-not-allowed': 'שיטת ההתחברות לא הופעלה ב-Firebase Console',
+    'auth/unauthorized-domain': 'הדומיין לא מורשה ב-Firebase Console (Authentication > Settings)',
+    'auth/operation-not-supported-in-this-environment': 'יש להריץ את האפליקציה דרך שרת (http://localhost) ולא דרך file://'
+  };
+  async function runAuth(action) {
+    authError.textContent = '';
+    authBtns.forEach(b => b.disabled = true);
+    try { await action(); }
+    catch (e) { authError.textContent = AUTH_MSG[e.code] || 'שגיאת התחברות: ' + (e.code || e.message); }
+    finally { authBtns.forEach(b => b.disabled = false); }
+  }
+  const credentials = () => [authEmail.value.trim(), authPass.value];
+  authForm.addEventListener('submit', e => {
+    e.preventDefault();
+    runAuth(() => signInWithEmailAndPassword(auth, ...credentials()));
+  });
+  $('signupBtn').addEventListener('click', () => runAuth(() => createUserWithEmailAndPassword(auth, ...credentials())));
+  $('googleBtn').addEventListener('click', () => runAuth(() => signInWithPopup(auth, new GoogleAuthProvider())));
+  $('logoutBtn').addEventListener('click', () => signOut(auth).catch(dbError));
+
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      authScreen.hidden = true;
+      appEl.hidden = false;
+      $('userEmail').textContent = user.email || user.displayName || '';
+      authPass.value = '';
+      startSession(user);
+    } else {
+      stopSession();
+      appEl.hidden = true;
+      authScreen.hidden = false;
+    }
+  });
+
   /* ---------- init ---------- */
-  // Resume pending deletions that were in progress when the page was closed
-  const now0 = Date.now();
-  tasks = tasks.filter(t => {
-    if (!t.completedAt) { t.completedAt = null; return true; }
-    return now0 - t.completedAt < DELETE_DELAY;
-  });
-  save();
+  renderCourses();
   render();
-  tasks.forEach(t => {
-    if (t.completedAt) scheduleRemoval(t.id, Math.max(0, DELETE_DELAY - (now0 - t.completedAt)));
-  });
   setInterval(tick, 1000);
-  checkReminders();
   setInterval(checkReminders, 30000);
 })();
 </script>
