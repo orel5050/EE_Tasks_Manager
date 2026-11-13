@@ -307,7 +307,7 @@
 </style>
 </head>
 <body>
-<div class="auth-screen" id="authScreen" hidden>
+<div class="auth-screen" id="authScreen">
   <section class="panel auth-panel">
     <div class="logo">
       <svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -326,13 +326,13 @@
         <input type="password" id="authPass" dir="ltr" autocomplete="current-password" placeholder="לפחות 6 תווים">
       </div>
       <div class="auth-actions">
-        <button type="submit" class="add" id="loginBtn">התחבר</button>
-        <button type="button" class="add secondary" id="signupBtn">הרשם</button>
+        <button type="submit" class="add" id="loginBtn" disabled>התחבר</button>
+        <button type="button" class="add secondary" id="signupBtn" disabled>הרשם</button>
       </div>
       <p class="error" id="authError" role="alert"></p>
     </form>
     <div class="auth-sep">או</div>
-    <button type="button" class="add secondary" id="googleBtn">המשך עם Google</button>
+    <button type="button" class="add secondary" id="googleBtn" disabled>המשך עם Google</button>
   </section>
 </div>
 
@@ -1042,6 +1042,7 @@ const db = getFirestore(fbApp);
   /* ---------- auth ---------- */
   const authScreen = $('authScreen'), appEl = $('app'), authForm = $('authForm');
   const authEmail = $('authEmail'), authPass = $('authPass'), authError = $('authError');
+  const userEmail = $('userEmail'), logoutBtn = $('logoutBtn');
   const authBtns = [$('loginBtn'), $('signupBtn'), $('googleBtn')];
   const AUTH_MSG = {
     'auth/invalid-email': 'כתובת אימייל לא תקינה',
@@ -1075,20 +1076,38 @@ const db = getFirestore(fbApp);
   });
   $('signupBtn').addEventListener('click', () => runAuth(() => createUserWithEmailAndPassword(auth, ...credentials())));
   $('googleBtn').addEventListener('click', () => runAuth(() => signInWithPopup(auth, new GoogleAuthProvider())));
-  $('logoutBtn').addEventListener('click', () => signOut(auth).catch(dbError));
+  logoutBtn.addEventListener('click', async () => {
+    logoutBtn.disabled = true;
+    try { await signOut(auth); }
+    catch (e) {
+      console.error(e);
+      toast(AUTH_MSG[e.code] || 'שגיאה בהתנתקות: ' + (e.code || e.message), true);
+    } finally { logoutBtn.disabled = false; }
+  });
 
   onAuthStateChanged(auth, user => {
-    if (user) {
+    appEl.hidden = true;
+    userEmail.textContent = '';
+    stopSession();
+    authBtns.forEach(b => b.disabled = false);
+    authError.textContent = '';
+    if (user !== null) {
+      userEmail.textContent = user.email || user.displayName || '';
+      authPass.value = '';
       authScreen.hidden = true;
       appEl.hidden = false;
-      $('userEmail').textContent = user.email || user.displayName || '';
-      authPass.value = '';
       startSession(user);
     } else {
-      stopSession();
-      appEl.hidden = true;
       authScreen.hidden = false;
     }
+  }, e => {
+    console.error(e);
+    appEl.hidden = true;
+    authScreen.hidden = false;
+    userEmail.textContent = '';
+    stopSession();
+    authBtns.forEach(b => b.disabled = true);
+    authError.textContent = AUTH_MSG[e.code] || 'לא ניתן לבדוק את מצב ההתחברות. נסה לרענן את הדף: ' + (e.code || e.message);
   });
 
   /* ---------- init ---------- */
